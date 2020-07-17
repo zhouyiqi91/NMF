@@ -1,10 +1,14 @@
 library(Seurat)
-argv = commandArgs()
-rds = readRDS(argv[2])
-raw.data = rds@raw.data
+library(argparser)
+
+argv <- arg_parser('')
+argv <- add_argument(argv,"--rds", help="rds file")
+argv <- parse_args(argv)
+print ("loading rds")
+rds = readRDS(argv$rds)
+mtx = rds@raw.data
 
 dir.create("matrix")
-setwd("matrix")
 setwd("matrix")
 writeMM(mtx, "matrix.mtx")
 genes = as.data.frame(rownames(mtx))

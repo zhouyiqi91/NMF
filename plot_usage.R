@@ -1,11 +1,19 @@
 library(Seurat)
 library(tidyverse)
-argv = commandArgs()
-print(argv[2])
-rds = readRDS(argv[2])
-usage.norm.file = argv[3]
-sample.name = argv[4]
-k = argv[5]
+library(argparser)
+
+argv <- arg_parser('')
+argv <- add_argument(argv,"--rds", help="rds file")
+argv <- add_argument(argv,"--usage_file", help="usage_file")
+argv <- add_argument(argv,"--sample", help="sample name")
+argv <- add_argument(argv,"--k", help="k selection")
+argv <- parse_args(argv)
+
+
+rds = readRDS(argv$rds)
+usage.norm.file = argv$usage_file
+sample.name = argv$sample
+k = argv$k
 
 usage.norm = read_tsv(usage.norm.file)
 usage.norm = tibble::column_to_rownames(usage.norm,"index")
@@ -16,5 +24,5 @@ rds@meta.data = new.meta
 cols = paste("Usage",c(1:k),sep="_")
 pdf.name = paste(sample.name,"usage_plot.pdf",sep="_")
 pdf(pdf.name,height=14,width=10)
-FeaturePlot(rds,features.plot = cols,no.legend = F)
+FeaturePlot(rds,features.plot = cols,no.legend = F,nCol=2)
 dev.off()
