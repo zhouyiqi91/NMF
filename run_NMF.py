@@ -15,49 +15,51 @@ import scanpy as sc
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s') 
 
-def run_NMF(sample_name,matrix_10X,threads,K_range,K_selection,density_threshold,iteration):
-    logging.info("reading matrix")
-    adata = sc.read_10x_mtx(matrix_10X,var_names='gene_symbols',cache=False)
-    adata.var_names_make_unique()
-    outdir = "NMF_out/"
-    if not os.path.exists(outdir):
-        os.mkdir(outdir)
-    count_adat_fn = outdir + sample_name + '.h5ad'
-    logging.info("writing h5 file")
-    sc.write(count_adat_fn, adata)
+def run_NMF(sample_name,matrix_10X,threads,K_range,K_selection,density_threshold,iteration,run_K):
+    if not run_K:
+        logging.info("reading matrix")
+        adata = sc.read_10x_mtx(matrix_10X,var_names='gene_symbols',cache=False)
+        adata.var_names_make_unique()
+        outdir = "NMF_out/"
+        if not os.path.exists(outdir):
+            os.mkdir(outdir)
+        count_adat_fn = outdir + sample_name + '.h5ad'
+        logging.info("writing h5 file")
+        sc.write(count_adat_fn, adata)
 
-    numiter=iteration # Number of NMF replicates. Set this to a larger value ~200 for real data. We set this to a relatively low value here for illustration at a faster speed
-    numhvgenes=2000 ## Number of over-dispersed genes to use for running the actual factorizations
-    ## Results will be saved to [output_directory]/[run_name] which in this example is example_PBMC/cNMF/pbmc_cNMF
-    seed = 0 ## Specify a seed pseudorandom number generation for reproducibility
+        numiter=iteration # Number of NMF replicates. Set this to a larger value ~200 for real data. We set this to a relatively low value here for illustration at a faster speed
+        numhvgenes=2000 ## Number of over-dispersed genes to use for running the actual factorizations
+        ## Results will be saved to [output_directory]/[run_name] which in this example is example_PBMC/cNMF/pbmc_cNMF
+        seed = 0 ## Specify a seed pseudorandom number generation for reproducibility
 
-    numworkers= threads
-    prepare_cmd = """python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
-    prepare --output-dir %s --name %s -c %s -k %s --n-iter %d \
-    --total-workers %d --seed %d --numgenes %d --beta-loss frobenius""" % (outdir, 
-        sample_name, count_adat_fn, K_range, numiter, numworkers, seed, numhvgenes)
-    logging.info('Prepare command assuming parallelization with %d cores:\n%s' % (numworkers, prepare_cmd))
-    os.system(prepare_cmd)
+        numworkers= threads
+        prepare_cmd = """python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
+        prepare --output-dir %s --name %s -c %s -k %s --n-iter %d \
+        --total-workers %d --seed %d --numgenes %d --beta-loss frobenius""" % (outdir, 
+            sample_name, count_adat_fn, K_range, numiter, numworkers, seed, numhvgenes)
+        logging.info('Prepare command assuming parallelization with %d cores:\n%s' % (numworkers, prepare_cmd))
+        os.system(prepare_cmd)
 
-    ## Using GNU parallel
-    worker_index = ' '.join([str(x) for x in range(numworkers)])
-    factorize_cmd = """parallel python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
-        factorize --output-dir %s --name %s --worker-index {} ::: %s""" % (outdir, sample_name, worker_index)
-    logging.info('Factorize command to simultaneously run factorization over %d cores using GNU parallel:\n%s' % (numworkers, factorize_cmd))
-    os.system(factorize_cmd)
+        ## Using GNU parallel
+        worker_index = ' '.join([str(x) for x in range(numworkers)])
+        factorize_cmd = """parallel python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
+            factorize --output-dir %s --name %s --worker-index {} ::: %s""" % (outdir, sample_name, worker_index)
+        logging.info('Factorize command to simultaneously run factorization over %d cores using GNU parallel:\n%s' % (numworkers, factorize_cmd))
+        os.system(factorize_cmd)
 
-    # combine
-    combine_cmd = 'python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
-         combine --output-dir %s --name %s' % (outdir, sample_name)
-    logging.info(combine_cmd)
-    os.system(combine_cmd)
+        # combine
+        combine_cmd = 'python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
+            combine --output-dir %s --name %s' % (outdir, sample_name)
+        logging.info(combine_cmd)
+        os.system(combine_cmd)
 
-    worker_index = ' '.join([str(x) for x in range(numworkers)])
-    kselect_plot_cmd = 'python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
-        k_selection_plot --output-dir %s --name %s' % (outdir, sample_name)
-    logging.info('K selection plot command: %s' % kselect_plot_cmd)
-    os.system(kselect_plot_cmd)
+        worker_index = ' '.join([str(x) for x in range(numworkers)])
+        kselect_plot_cmd = 'python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
+            k_selection_plot --output-dir %s --name %s' % (outdir, sample_name)
+        logging.info('K selection plot command: %s' % kselect_plot_cmd)
+        os.system(kselect_plot_cmd)
 
+    # run_K
     consensus_cmd = 'python /SGRNJ/Database/script/soft/cNMF/cnmf.py \
         consensus --output-dir %s --name %s --local-density-threshold %.2f \
         --components %d --show-clustering' % (outdir, sample_name, density_threshold, K_selection)
@@ -99,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--K_selection", help="K selection",default=7)
     parser.add_argument("-d","--density_threshold", help="--density threshold",default = 0.2)
     parser.add_argument("--iteration", help="iteration",default=100)
+    parser.add_argument("--run_K", help="only run K selection",action="store_true")
     args = parser.parse_args()
 
     sample_name = args.sample_name
@@ -108,5 +111,6 @@ if __name__ == "__main__":
     K_selection = int(args.K_selection)
     density_threshold = float(args.density_threshold)
     iteration = int(args.iteration)
+    run_K = args.run_K
 
-    run_NMF(sample_name,matrix_10X,threads,K_range,K_selection,density_threshold, iteration)
+    run_NMF(sample_name,matrix_10X,threads,K_range,K_selection,density_threshold, iteration, run_K)
